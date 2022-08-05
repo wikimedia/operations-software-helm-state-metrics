@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"log"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"helm.sh/helm/v3/pkg/action"
@@ -20,11 +21,13 @@ var (
 )
 
 type helmCollector struct {
-	client   *action.List
-	Info     *prometheus.Desc
-	Revision *prometheus.Desc
-	Status   *prometheus.Desc
-	Updated  *prometheus.Desc
+	client       *action.List
+	TestRun      bool
+	Info         *prometheus.Desc
+	Revision     *prometheus.Desc
+	Status       *prometheus.Desc
+	Updated      *prometheus.Desc
+	ListDuration *prometheus.HistogramVec
 }
 
 func NewHelmCollector(cfg *action.Configuration) *helmCollector {
@@ -35,6 +38,12 @@ func NewHelmCollector(cfg *action.Configuration) *helmCollector {
 	client.Failed = true
 	client.Pending = true
 	client.SetStateMask()
+
+	listDuration := prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name: metrics_prefix + "list_duration_seconds",
+		Help: "helm list latency distribution"},
+		[]string{"status"},
+	)
 
 	return &helmCollector{
 		client: client,
@@ -62,6 +71,7 @@ func NewHelmCollector(cfg *action.Configuration) *helmCollector {
 			commonLabels,
 			prometheus.Labels{},
 		),
+		ListDuration: listDuration,
 	}
 }
 
@@ -70,18 +80,27 @@ func (hc *helmCollector) Describe(ch chan<- *prometheus.Desc) {
 	ch <- hc.Revision
 	ch <- hc.Status
 	ch <- hc.Updated
+	hc.ListDuration.MetricVec.Describe(ch)
 }
 
 func (hc *helmCollector) Collect(ch chan<- prometheus.Metric) {
+	runStart := time.Now()
 	results, err := hc.client.Run()
+	runDurationSeconds := time.Since(runStart).Seconds()
+	if hc.TestRun {
+		runDurationSeconds = 0.18
+	}
 	if err != nil {
 		log.Println(err)
 		ch <- prometheus.NewInvalidMetric(hc.Info, err)
 		ch <- prometheus.NewInvalidMetric(hc.Revision, err)
 		ch <- prometheus.NewInvalidMetric(hc.Status, err)
 		ch <- prometheus.NewInvalidMetric(hc.Updated, err)
+		hc.ListDuration.WithLabelValues("error").Observe(runDurationSeconds)
 		return
 	}
+	hc.ListDuration.WithLabelValues("success").Observe(runDurationSeconds)
+	hc.ListDuration.MetricVec.Collect(ch)
 
 	for _, r := range results {
 		ch <- prometheus.MustNewConstMetric(

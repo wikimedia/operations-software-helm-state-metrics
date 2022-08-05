@@ -13,12 +13,12 @@ import (
 	"helm.sh/helm/v3/pkg/release"
 	"helm.sh/helm/v3/pkg/storage"
 	"helm.sh/helm/v3/pkg/storage/driver"
-	"helm.sh/helm/v3/pkg/time"
+	helmtime "helm.sh/helm/v3/pkg/time"
 )
 
 func TestCollector(t *testing.T) {
 	defaultNamespace := "default"
-	timestamp := time.Unix(1000000000, 0).UTC()
+	timestamp := helmtime.Unix(1000000000, 0).UTC()
 	chartInfo := &chart.Chart{
 		Metadata: &chart.Metadata{
 			Name:       "chickadee",
@@ -135,6 +135,7 @@ func TestCollector(t *testing.T) {
 	}
 
 	hc := NewHelmCollector(actionConfig)
+	hc.TestRun = true
 	if err := testutil.CollectAndCompare(hc, exp); err != nil {
 		t.Error("Unexpected metrics returned:", err)
 	}

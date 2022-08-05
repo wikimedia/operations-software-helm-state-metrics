@@ -5,6 +5,22 @@ helm_release_info{app_version="0.0.1",chart="chickadee",chart_version="1.0.0",na
 helm_release_info{app_version="0.0.1",chart="chickadee",chart_version="1.0.0",name="bar-pending-rollback",namespace="default"} 1
 helm_release_info{app_version="0.0.1",chart="chickadee",chart_version="1.0.0",name="bar-pending-upgrade",namespace="default"} 1
 helm_release_info{app_version="0.0.1",chart="chickadee",chart_version="1.0.0",name="foo",namespace="default"} 1
+# HELP helm_release_list_duration_seconds helm list latency distribution
+# TYPE helm_release_list_duration_seconds histogram
+helm_release_list_duration_seconds_bucket{status="success",le="0.005"} 0
+helm_release_list_duration_seconds_bucket{status="success",le="0.01"} 0
+helm_release_list_duration_seconds_bucket{status="success",le="0.025"} 0
+helm_release_list_duration_seconds_bucket{status="success",le="0.05"} 0
+helm_release_list_duration_seconds_bucket{status="success",le="0.1"} 0
+helm_release_list_duration_seconds_bucket{status="success",le="0.25"} 1
+helm_release_list_duration_seconds_bucket{status="success",le="0.5"} 1
+helm_release_list_duration_seconds_bucket{status="success",le="1"} 1
+helm_release_list_duration_seconds_bucket{status="success",le="2.5"} 1
+helm_release_list_duration_seconds_bucket{status="success",le="5"} 1
+helm_release_list_duration_seconds_bucket{status="success",le="10"} 1
+helm_release_list_duration_seconds_bucket{status="success",le="+Inf"} 1
+helm_release_list_duration_seconds_sum{status="success"} 0.18
+helm_release_list_duration_seconds_count{status="success"} 1
 # HELP helm_release_revision Currently deployed helm chart revision
 # TYPE helm_release_revision gauge
 helm_release_revision{name="bar",namespace="othernamespace"} 2

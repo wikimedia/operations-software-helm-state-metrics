@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"log"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -20,8 +21,15 @@ var (
 	status       = []release.Status{release.StatusDeployed, release.StatusFailed, release.StatusPendingInstall, release.StatusPendingRollback, release.StatusPendingUpgrade}
 )
 
+type cachedClient struct {
+	*action.List
+	releases []*release.Release
+	mutex    sync.Mutex
+	ttl      time.Time
+}
+
 type helmCollector struct {
-	client       *action.List
+	client       *cachedClient
 	TestRun      bool
 	Info         *prometheus.Desc
 	Revision     *prometheus.Desc
@@ -46,7 +54,7 @@ func NewHelmCollector(cfg *action.Configuration) *helmCollector {
 	)
 
 	return &helmCollector{
-		client: client,
+		client: &cachedClient{List: client},
 		Info: prometheus.NewDesc(
 			metrics_prefix+"info",
 			"Information about helm release",
@@ -85,7 +93,7 @@ func (hc *helmCollector) Describe(ch chan<- *prometheus.Desc) {
 
 func (hc *helmCollector) Collect(ch chan<- prometheus.Metric) {
 	runStart := time.Now()
-	results, err := hc.client.Run()
+	results, cached, err := hc.client.ListReleases()
 	runDurationSeconds := time.Since(runStart).Seconds()
 	if hc.TestRun {
 		runDurationSeconds = 0.18
@@ -96,10 +104,14 @@ func (hc *helmCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.NewInvalidMetric(hc.Revision, err)
 		ch <- prometheus.NewInvalidMetric(hc.Status, err)
 		ch <- prometheus.NewInvalidMetric(hc.Updated, err)
-		hc.ListDuration.WithLabelValues("error").Observe(runDurationSeconds)
+		if !cached {
+			hc.ListDuration.WithLabelValues("error").Observe(runDurationSeconds)
+		}
 		return
 	}
-	hc.ListDuration.WithLabelValues("success").Observe(runDurationSeconds)
+	if !cached {
+		hc.ListDuration.WithLabelValues("success").Observe(runDurationSeconds)
+	}
 	hc.ListDuration.MetricVec.Collect(ch)
 
 	for _, r := range results {
@@ -147,6 +159,26 @@ func (hc *helmCollector) Collect(ch chan<- prometheus.Metric) {
 			r.Namespace,
 		)
 	}
+}
+
+func (c *cachedClient) ListReleases() ([]*release.Release, bool, error) {
+	c.mutex.Lock()
+	cached := true
+	defer c.mutex.Unlock()
+	if time.Now().After(c.ttl) {
+		// Update the cache
+		cached = false
+		r, err := c.Run()
+		if err != nil {
+			// Don't return the cached releases in case of error
+			return nil, cached, err
+		}
+		c.releases = r
+		// Cache will be dirty in 1 minute from now
+		c.ttl = time.Now().Add(time.Duration(1 * time.Minute))
+	}
+
+	return c.releases, cached, nil
 }
 
 func issue1347(c *chart.Chart) error {

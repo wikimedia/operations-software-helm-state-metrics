@@ -1,0 +1,15 @@
+domain: wikimedia.org
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: helm-state-metrics
+repo: gerrit.wikimedia.org/r/operations/software/helm-state-metrics
+resources:
+- controller: true
+  group: core
+  kind: Secret
+  path: k8s.io/api/core/v1
+  version: v1
+version: "3"

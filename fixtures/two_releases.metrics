@@ -1,0 +1,25 @@
+# HELP helm_release_info Information about helm release
+# TYPE helm_release_info gauge
+helm_release_info{app_version="1.1.0",chart="unicorn",chart_version="0.0.1",name="pinkunicorn",namespace="pink",revision="1"} 1
+helm_release_info{app_version="1.1.0",chart="unicorn",chart_version="0.0.1",name="punkunicorn",namespace="default",revision="1"} 1
+# HELP helm_release_revision Currently deployed helm chart revision
+# TYPE helm_release_revision gauge
+helm_release_revision{name="pinkunicorn",namespace="pink"} 1
+helm_release_revision{name="punkunicorn",namespace="default"} 1
+# HELP helm_release_status Status of a helm release
+# TYPE helm_release_status gauge
+helm_release_status{name="pinkunicorn",namespace="pink",status="deployed"} 1
+helm_release_status{name="pinkunicorn",namespace="pink",status="failed"} 0
+helm_release_status{name="pinkunicorn",namespace="pink",status="pending-install"} 0
+helm_release_status{name="pinkunicorn",namespace="pink",status="pending-rollback"} 0
+helm_release_status{name="pinkunicorn",namespace="pink",status="pending-upgrade"} 0
+helm_release_status{name="punkunicorn",namespace="default",status="deployed"} 1
+helm_release_status{name="punkunicorn",namespace="default",status="failed"} 0
+helm_release_status{name="punkunicorn",namespace="default",status="pending-install"} 0
+helm_release_status{name="punkunicorn",namespace="default",status="pending-rollback"} 0
+helm_release_status{name="punkunicorn",namespace="default",status="pending-upgrade"} 0
+# HELP helm_release_updated Release update Unix time
+# TYPE helm_release_updated gauge
+helm_release_updated{name="pinkunicorn",namespace="pink"} 9.7958694e+08
+helm_release_updated{name="punkunicorn",namespace="default"} 9.7958694e+08
+ 

@@ -1,61 +1,96 @@
+/*
+Copyright 2022 - Janis Meybohm, Wikimedia Foundation Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package main
 
 import (
-	"fmt"
-	"log"
-	"net/http"
+	"flag"
 	"os"
-	"runtime"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
+	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
+	// to ensure that exec-entrypoint and run can make use of them.
 
-	"github.com/namsral/flag"
-	"helm.sh/helm/v3/pkg/action"
-	"helm.sh/helm/v3/pkg/cli"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+
+	"k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
+	"gerrit.wikimedia.org/r/operations/software/helm-state-metrics/controllers"
+	//+kubebuilder:scaffold:imports
 )
 
 var (
-	Version       = "development"
-	GoVersion     = runtime.Version()
-	listenAddress = flag.String("listen-address", ":9104", "Address on which to expose metrics")
-	debug         = flag.Bool("debug", false, "Run in debug mode")
-	version       = flag.Bool("version", false, "Print version number and exit")
-	settings      = cli.New()
+	scheme   = runtime.NewScheme()
+	setupLog = ctrl.Log.WithName("setup")
 )
 
 func init() {
-	log.SetFlags(log.Lshortfile)
-}
+	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-func debugLog(format string, v ...interface{}) {
-	if settings.Debug {
-		format = fmt.Sprintf("[debug] %s\n", format)
-		log.Output(2, fmt.Sprintf(format, v...))
-	}
+	//+kubebuilder:scaffold:scheme
 }
 
 func main() {
+	var metricsAddr string
+	var probeAddr string
+	flag.StringVar(&metricsAddr, "metrics-bind-address", ":9104", "The address the metric endpoint binds to.")
+	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	opts := zap.Options{
+		Development: true,
+	}
+	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	if *version {
-		fmt.Printf("Version: \"%s\", GoVersion: \"%s\"\n", Version, GoVersion)
-		return
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme:                 scheme,
+		MetricsBindAddress:     metricsAddr,
+		HealthProbeBindAddress: probeAddr,
+	})
+	if err != nil {
+		setupLog.Error(err, "unable to start manager")
+		os.Exit(1)
 	}
 
-	settings.Debug = *debug
-	cfg := new(action.Configuration)
-	// init k8s rest client for all namespaces ("")
-	if err := cfg.Init(settings.RESTClientGetter(), "", os.Getenv("HELM_DRIVER"), debugLog); err != nil {
-		log.Fatalln(err)
+	if err = (&controllers.SecretReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "Secret")
+		os.Exit(1)
+	}
+	//+kubebuilder:scaffold:builder
+
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up health check")
+		os.Exit(1)
+	}
+	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		setupLog.Error(err, "unable to set up ready check")
+		os.Exit(1)
 	}
 
-	hc := NewHelmCollector(cfg)
-	prometheus.MustRegister(hc)
-	http.Handle("/metrics", promhttp.Handler())
-
-	if err := http.ListenAndServe(*listenAddress, nil); err != nil {
-		log.Fatalln(err)
+	setupLog.Info("starting manager")
+	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+		setupLog.Error(err, "problem running manager")
+		os.Exit(1)
 	}
-
 }
